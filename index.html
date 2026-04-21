@@ -1,185 +1,74 @@
 <!DOCTYPE html>
 <html lang="id">
-
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Scanner</title>
-    <!-- Library JSQuagga untuk QR & Barcode -->
-    <script src="https://cdn.jsdelivr.net/npm/jsquagga@0.10.10/dist/quagga.min.js"></script>
-    <!-- Tailwind CSS untuk tampilan premium -->
-    <link rel="stylesheet" href="https://abdul-sajid.github.io/scanner/style.css">
-    <style>
-        #reader video {
-            object-fit: cover !important;
-            border-radius: 1rem;
-        }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Scanner</title>
 
-        .scan-region-highlight {
-            border-radius: 1rem !important;
-            outline: none !important;
-        }
-    </style>
+<script src="https://unpkg.com/html5-qrcode"></script>
+
+<style>
+body { margin:0; background:#020617; color:white; font-family:sans-serif;}
+#reader { width:100%; height:100vh;}
+</style>
 </head>
 
-<body class="bg-slate-950 text-white font-sans overflow-hidden h-screen flex flex-col">
-    <!-- Header -->
-    <div class="px-6 py-4 bg-slate-900 border-b border-white/10 flex justify-between items-center shrink-0">
-        <div>
-            <h1 class="text-lg font-bold tracking-tight text-cyan-400">QR & BARCODE SCANNER</h1>
-            <p id="target-label" class="text-[10px] text-slate-400 uppercase tracking-widest mt-0.5">READY TO SCAN</p>
-        </div>
-        <button onclick="window.close()"
-            class="w-10 h-10 flex items-center justify-center rounded-full bg-white/5 hover:bg-red-500/20 text-white transition-colors">
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-            </svg>
-        </button>
-    </div>
+<body>
 
-    <!-- Scanner Viewport -->
-    <div class="flex-1 relative bg-black overflow-hidden flex items-center justify-center">
-        <!-- Kotak Focus di Tengah (Visual Only) -->
-        <div class="absolute inset-0 z-10 pointer-events-none flex items-center justify-center">
-            <div class="w-64 h-64 border-2 border-dashed border-cyan-400/50 rounded-3xl"></div>
-        </div>
+<div id="reader"></div>
 
-        <div id="reader" class="w-full h-full"></div>
+<script>
+const params = new URLSearchParams(window.location.search);
+const targetId = params.get('target');
 
-        <!-- Overlay Awal (Minta Izin) -->
-        <div id="permission-view" style="display: none"
-            class="absolute inset-0 z-20 bg-slate-950 flex flex-col items-center justify-center p-8 text-center">
-            <div class="w-20 h-20 bg-cyan-500/10 rounded-3xl flex items-center justify-center mb-6 text-cyan-400">
-                <svg class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
-                        d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z">
-                    </path>
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
-                        d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                </svg>
-            </div>
-            <h2 class="text-xl font-bold mb-2">Akses Kamera</h2>
-            <p class="text-slate-400 text-sm mb-8 leading-relaxed">Berikan izin kamera untuk memindai barcode produk
-                secara otomatis.</p>
-            <button onclick="startScanning()"
-                class="w-full py-4 bg-cyan-600 hover:bg-cyan-500 text-white rounded-2xl font-bold shadow-lg shadow-cyan-900/20 transition-all active:scale-95">
-                IZINKAN & MULAI
-            </button>
-        </div>
-    </div>
+let scanner;
 
-    <!-- Footer Status -->
-    <div class="p-6 bg-slate-900 border-t border-white/10 shrink-0 text-center">
-        <p class="text-[10px] text-slate-500 tracking-tighter">POWERED BY JSQUAGGA | SUPPORTS QR CODE & BARCODE</p>
-    </div>
+function startScanning() {
+    scanner = new Html5Qrcode("reader");
 
-    <script>
-        const params = new URLSearchParams(window.location.search);
-        const targetId = params.get('target');
-
-        if (targetId) {
-            document.getElementById('target-label').innerText = "SCANNING FOR: " + targetId.replace('trx-', '');
+    Html5Qrcode.getCameras().then(devices => {
+        if (!devices || devices.length === 0) {
+            alert("❌ Kamera tidak ditemukan");
+            return;
         }
 
-        // Auto-start scanning saat halaman dimuat
-        window.addEventListener('load', () => {
-            startScanning();
-        });
+        scanner.start(
+            { facingMode: "environment" },
+            {
+                fps: 10,
+                qrbox: 250
+            },
+            (decodedText, decodedResult) => {
+                console.log("✅ Hasil:", decodedText);
 
-        function startScanning() {
-            try {
-                // Sembunyikan overlay
-                document.getElementById('permission-view').style.display = 'none';
-
-                const readerElement = document.getElementById('reader');
-                readerElement.innerHTML = '';
-
-                const config = {
-                    inputStream: {
-                        name: "Live",
-                        type: "LiveStream",
-                        constraints: {
-                            width: { min: 640 },
-                            height: { min: 480 },
-                            facingMode: "environment"
-                        },
-                        target: readerElement
-                    },
-                    locator: {
-                        patchSize: "medium",
-                        halfSample: true
-                    },
-                    numOfWorkers: 4,
-                    decoder: {
-                        readers: [
-                            "code_128_reader",
-                            "ean_reader",
-                            "upc_reader",
-                            "qr_reader",
-                            "code_39_reader",
-                            "code_93_reader"
-                        ]
-                    },
-                    locate: true
-                };
-
-                Quagga.init(config, (err) => {
-                    if (err) {
-                        console.error('❌ Quagga init error:', err);
-                        throw err;
-                    }
-
-                    console.log('✅ Quagga initialized');
-                    Quagga.start();
-
-                    Quagga.onDetected((result) => {
-                        if (result && result.codeResult && result.codeResult.code) {
-                            const decodedText = result.codeResult.code;
-                            console.log('✅ Hasil scan:', decodedText, 'Format:', result.codeResult.format);
-
-                            if (window.opener) {
-                                window.opener.postMessage({
-                                    type: 'SCAN_RESULT',
-                                    text: decodedText,
-                                    targetId: targetId,
-                                    format: result.codeResult.format
-                                }, "*");
-                            }
-                            if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
-
-                            // Stop scanning
-                            Quagga.stop();
-                            setTimeout(() => window.close(), 300);
-                        }
-                    });
-                });
-
-            } catch (err) {
-                console.error('❌ Error detail:', {
-                    name: err.name,
-                    message: err.message,
-                    stack: err.stack
-                });
-
-                let errorMsg = "Gagal mengakses kamera.";
-                
-                if (err.name === 'NotAllowedError') {
-                    errorMsg = "❌ Izin ditolak. Buka pengaturan HP → izinkan akses kamera.";
-                } else if (err.name === 'NotFoundError') {
-                    errorMsg = "❌ Kamera tidak ditemukan. Cek apakah kamera tersedia.";
-                } else if (err.name === 'NotReadableError') {
-                    errorMsg = "❌ Kamera sedang digunakan app lain. Tutup app tersebut.";
-                } else if (err.message.includes('HTTPS')) {
-                    errorMsg = "❌ Halaman harus HTTPS untuk akses kamera.";
-                } else {
-                    errorMsg = "❌ Error: " + err.message;
+                if (window.opener) {
+                    window.opener.postMessage({
+                        type: 'SCAN_RESULT',
+                        text: decodedText,
+                        targetId: targetId,
+                        format: decodedResult.result.format?.formatName || "UNKNOWN"
+                    }, "*");
                 }
 
-                alert(errorMsg);
-                document.getElementById('permission-view').style.display = 'flex';
-            }
-        }
-    </script>
-</body>
+                if (navigator.vibrate) navigator.vibrate(200);
 
+                scanner.stop().then(() => {
+                    setTimeout(() => window.close(), 300);
+                });
+            },
+            (errorMessage) => {
+                // ignore scan error (normal)
+            }
+        );
+
+    }).catch(err => {
+        console.error(err);
+        alert("❌ Gagal akses kamera");
+    });
+}
+
+window.addEventListener('load', startScanning);
+</script>
+
+</body>
 </html>
