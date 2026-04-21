@@ -5,10 +5,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Scanner</title>
-    <!-- Library QR Scanner -->
-    <script src="https://unpkg.com/html5-qrcode"></script>
+    <!-- Library ZXing untuk QR & Barcode -->
+    <script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.20.0"></script>
     <!-- Tailwind CSS untuk tampilan premium -->
     <link rel="stylesheet" href="https://abdul-sajid.github.io/scanner/style.css">
+    <link rel="stylesheet" href="style.css">
     <style>
         #reader video {
             object-fit: cover !important;
@@ -26,7 +27,7 @@
     <!-- Header -->
     <div class="px-6 py-4 bg-slate-900 border-b border-white/10 flex justify-between items-center shrink-0">
         <div>
-            <h1 class="text-lg font-bold tracking-tight text-cyan-400">QR SCANNER</h1>
+            <h1 class="text-lg font-bold tracking-tight text-cyan-400">QR & BARCODE SCANNER</h1>
             <p id="target-label" class="text-[10px] text-slate-400 uppercase tracking-widest mt-0.5">READY TO SCAN</p>
         </div>
         <button onclick="window.close()"
@@ -47,7 +48,7 @@
         <div id="reader" class="w-full h-full"></div>
 
         <!-- Overlay Awal (Minta Izin) -->
-        <div id="permission-view"
+        <div id="permission-view" style="display: none"
             class="absolute inset-0 z-20 bg-slate-950 flex flex-col items-center justify-center p-8 text-center">
             <div class="w-20 h-20 bg-cyan-500/10 rounded-3xl flex items-center justify-center mb-6 text-cyan-400">
                 <svg class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -70,11 +71,10 @@
 
     <!-- Footer Status -->
     <div class="p-6 bg-slate-900 border-t border-white/10 shrink-0 text-center">
-        <p class="text-[10px] text-slate-500 tracking-tighter">POWERED BY HTML5-QRCODE | GITHUB PAGES VERSION</p>
+        <p class="text-[10px] text-slate-500 tracking-tighter">POWERED BY ZXING | SUPPORTS QR CODE & BARCODE</p>
     </div>
 
     <script>
-        const html5QrCode = new Html5Qrcode("reader");
         const params = new URLSearchParams(window.location.search);
         const targetId = params.get('target');
 
@@ -82,36 +82,59 @@
             document.getElementById('target-label').innerText = "SCANNING FOR: " + targetId.replace('trx-', '');
         }
 
+        // Auto-start scanning saat halaman dimuat
+        window.addEventListener('load', () => {
+            startScanning();
+        });
+
         async function startScanning() {
             try {
                 // Sembunyikan overlay
                 document.getElementById('permission-view').style.display = 'none';
 
-                const config = {
-                    fps: 20,
-                    qrbox: { width: 250, height: 250 },
-                    aspectRatio: 1.0,
-                    showTorchButtonIfSupported: true
-                };
+                const codeReader = new ZXing.BrowserMultiFormatReader();
+                const videoElement = document.createElement('video');
+                const readerElement = document.getElementById('reader');
 
-                await html5QrCode.start(
-                    { facingMode: "environment" },
-                    config,
-                    (decodedText) => {
-                        if (window.opener) {
-                            window.opener.postMessage({
-                                type: 'SCAN_RESULT',
-                                text: decodedText,
-                                targetId: targetId
-                            }, "*");
+                // Atur video element
+                videoElement.style.width = '100%';
+                videoElement.style.height = '100%';
+                videoElement.style.objectFit = 'cover';
+                readerElement.innerHTML = '';
+                readerElement.appendChild(videoElement);
+
+                // Mulai scanning dengan camera belakang
+                const result = await codeReader.decodeFromVideoDevice(
+                    undefined,
+                    videoElement,
+                    (result, error) => {
+                        if (result) {
+                            const decodedText = result.text;
+                            console.log('Hasil scan:', decodedText);
+                            
+                            if (window.opener) {
+                                window.opener.postMessage({
+                                    type: 'SCAN_RESULT',
+                                    text: decodedText,
+                                    targetId: targetId,
+                                    format: result.format
+                                }, "*");
+                            }
+                            if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+                            
+                            // Stop scanning
+                            codeReader.reset();
+                            setTimeout(() => window.close(), 300);
                         }
-                        if (navigator.vibrate) navigator.vibrate([100]);
-                        setTimeout(() => window.close(), 300);
                     }
                 );
+
             } catch (err) {
-                console.error(err);
-                alert("Gagal mengakses kamera. Pastikan browser diizinkan mengakses kamera di pengaturan HP.");
+                console.error('Error:', err);
+                const errorMsg = err.name === 'NotAllowedError' 
+                    ? "Kamera ditolak. Berikan izin akses kamera di pengaturan HP." 
+                    : "Gagal mengakses kamera. Cek koneksi & izin kamera.";
+                alert(errorMsg);
                 document.getElementById('permission-view').style.display = 'flex';
             }
         }
