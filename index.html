@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Scanner</title>
 
-    <script src="https://unpkg.com/html5-qrcode"></script>
+    <script src="https://cdn.jsdelivr.net/npm/quagga@0.10.1/dist/quagga.min.js"></script>
 
     <style>
         body {
@@ -111,69 +111,70 @@
         function startScanning() {
             document.getElementById("permission").style.display = "none";
 
-            scanner = new Html5Qrcode("reader");
+            const config = {
+                inputStream: {
+                    name: "Live",
+                    type: "LiveStream",
+                    target: document.querySelector("#reader"),
+                    constraints: {
+                        facingMode: "environment",
+                        width: { min: 640 },
+                        height: { min: 480 }
+                    }
+                },
+                decoder: {
+                    workers: 2,
+                    readers: [
+                        "code_128_reader",
+                        "ean_reader",
+                        "upc_reader",
+                        "qr_reader",
+                        "code_39_reader",
+                        "code_93_reader",
+                        "ean_8_reader",
+                        "upc_e_reader"
+                    ]
+                }
+            };
 
-            Html5Qrcode.getCameras().then(devices => {
-                if (!devices.length) {
-                    alert("❌ Kamera tidak ditemukan");
+            Quagga.init(config, (err) => {
+                if (err) {
+                    console.error("❌ Quagga error:", err);
+                    alert("❌ Gagal akses kamera");
+                    document.getElementById("permission").style.display = "flex";
                     return;
                 }
 
                 isScanning = true;
+                console.log("✅ Quagga initialized, scanning dimulai...");
+                Quagga.start();
 
-                scanner.start(
-                    { facingMode: "environment" },
-                    {
-                        fps: 30, // lebih tinggi = lebih responsif
-                        qrbox: { width: 150, height: 150 }, // horizontal (cocok barcode)
-                        formatsToSupport: [
-                            Html5QrcodeSupportedFormats.CODE_128,
-                            Html5QrcodeSupportedFormats.CODE_39,
-                            Html5QrcodeSupportedFormats.EAN_13,
-                            Html5QrcodeSupportedFormats.EAN_8,
-                            Html5QrcodeSupportedFormats.UPC_A,
-                            Html5QrcodeSupportedFormats.UPC_E
-                        ]
-                    },
+                Quagga.onDetected((result) => {
+                    if (!isScanning) return;
+                    if (!result.codeResult || !result.codeResult.code) return;
 
-                    // SUCCESS
-                    (decodedText) => {
-                        if (!isScanning) return;
+                    const decodedText = result.codeResult.code;
+                    console.log("✅ SCAN:", decodedText, "Format:", result.codeResult.format);
 
-                        console.log("✅ SCAN:", decodedText);
+                    isScanning = false;
 
-                        isScanning = false;
+                    if (window.opener) {
+                        window.opener.postMessage({
+                            type: "SCAN_RESULT",
+                            text: decodedText,
+                            format: result.codeResult.format,
+                            targetId: targetId || null
+                        }, "*");
+                    }
 
-                        if (window.opener) {
-                            window.opener.postMessage({
-                                type: "SCAN_RESULT",
-                                text: decodedText,
-                                targetId: targetId || null
-                            }, "*");
-                        }
+                    if (navigator.vibrate) navigator.vibrate(200);
 
-                        if (navigator.vibrate) navigator.vibrate(200);
-
-                        scanner.stop().then(() => {
-                            setTimeout(() => window.close(), 500);
-                        });
-                    },
-
-                    () => { }
-                );
-
-            }).catch(err => {
-                console.error(err);
-                alert("❌ Gagal akses kamera");
-                document.getElementById("permission").style.display = "flex";
-            });
-        }
-
-        // CLOSE BUTTON (AMAN)
-        function closeScanner() {
-            if (scanner && isScanning) {
-                scanner.stop().then(() => {
-                    window.close();
+                    Quagga.stop();
+                    setTimeout(() => window.close(), 500);
+                isScanning) {
+                Quagga.stop();
+            }
+            window.close();       window.close();
                 }).catch(() => {
                     window.close();
                 });
