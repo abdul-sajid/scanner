@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Scanner</title>
 
-    <script src="https://unpkg.com/html5-qrcode"></script>
+    <script src="https://cdn.jsdelivr.net/npm/quagga@0.10.1/dist/quagga.min.js"></script>
 
     <style>
         body {
@@ -53,133 +53,106 @@
         #reader {
             width: 100%;
             height: 100vh;
-            padding-top: 60px;
-            box-sizing: border-box;
-        }
-
-        /* PERMISSION */
-        .overlay {
-            position: fixed;
-            inset: 0;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background: #020617;
-            z-index: 30;
-        }
-
-        button.start-btn {
-            padding: 15px 20px;
-            border: none;
-            background: #06b6d4;
-            color: white;
-            border-radius: 10px;
-            font-weight: bold;
         }
     </style>
 </head>
 
 <body>
 
-    <!-- HEADER -->
     <div class="header">
-        <div class="title">SCAN QR / BARCODE</div>
+        <div class="title">SCAN BARCODE</div>
         <button class="close-btn" onclick="closeScanner()">✕</button>
     </div>
 
-    <!-- SCANNER -->
     <div id="reader"></div>
-
-    <!-- PERMISSION -->
-    <div id="permission" class="overlay" style="display: none;">
-        <button class="start-btn" onclick="startScanning()">IZINKAN & MULAI</button>
-    </div>
 
     <script>
         const params = new URLSearchParams(window.location.search);
         const targetId = params.get('target');
 
-        let scanner;
         let isScanning = false;
 
-        // AUTO-START saat halaman dimuat
-        window.addEventListener('load', () => {
-            startScanning();
-        });
+        // AUTO START
+        window.addEventListener('load', startScanning);
 
-        // START SCAN
         function startScanning() {
-            document.getElementById("permission").style.display = "none";
 
-            scanner = new Html5Qrcode("reader");
+            const config = {
+                inputStream: {
+                    name: "Live",
+                    type: "LiveStream",
+                    target: document.querySelector("#reader"),
+                    constraints: {
+                        facingMode: "environment",
+                        width: { min: 640 },
+                        height: { min: 480 }
+                    }
+                },
+                locator: {
+                    patchSize: "medium",
+                    halfSample: true
+                },
+                numOfWorkers: 2,
+                decoder: {
+                    readers: [
+                        "code_128_reader",
+                        "ean_reader",
+                        "ean_8_reader",
+                        "upc_reader",
+                        "upc_e_reader",
+                        "code_39_reader",
+                        "code_93_reader"
+                    ]
+                },
+                locate: true
+            };
 
-            Html5Qrcode.getCameras().then(devices => {
-                if (!devices.length) {
-                    alert("❌ Kamera tidak ditemukan");
+            Quagga.init(config, function (err) {
+                if (err) {
+                    console.error("❌ Quagga error:", err);
+                    alert("❌ Gagal akses kamera");
                     return;
                 }
 
+                console.log("✅ Quagga started");
                 isScanning = true;
+                Quagga.start();
+            });
 
-                scanner.start(
-                    { facingMode: "environment" },
-                    {
-                        fps: 30, // lebih tinggi = lebih responsif
-                        qrbox: { width: 300, height: 150 }, // horizontal (cocok barcode)
-                        formatsToSupport: [
-                            Html5QrcodeSupportedFormats.CODE_128,
-                            Html5QrcodeSupportedFormats.CODE_39,
-                            Html5QrcodeSupportedFormats.EAN_13,
-                            Html5QrcodeSupportedFormats.EAN_8,
-                            Html5QrcodeSupportedFormats.UPC_A,
-                            Html5QrcodeSupportedFormats.UPC_E
-                        ]
-                    },
+            Quagga.onDetected(function (result) {
+                if (!isScanning) return;
 
-                    // SUCCESS
-                    (decodedText) => {
-                        if (!isScanning) return;
+                if (!result.codeResult || !result.codeResult.code) return;
 
-                        console.log("✅ SCAN:", decodedText);
+                const code = result.codeResult.code;
+                console.log("✅ SCAN:", code);
 
-                        isScanning = false;
+                isScanning = false;
 
-                        if (window.opener) {
-                            window.opener.postMessage({
-                                type: "SCAN_RESULT",
-                                text: decodedText,
-                                targetId: targetId || null
-                            }, "*");
-                        }
+                if (window.opener) {
+                    window.opener.postMessage({
+                        type: "SCAN_RESULT",
+                        text: code,
+                        targetId: targetId || null
+                    }, "*");
+                }
 
-                        if (navigator.vibrate) navigator.vibrate(200);
+                if (navigator.vibrate) navigator.vibrate(200);
 
-                        scanner.stop().then(() => {
-                            setTimeout(() => window.close(), 500);
-                        });
-                    },
+                Quagga.stop();
 
-                    () => { }
-                );
-
-            }).catch(err => {
-                console.error(err);
-                alert("❌ Gagal akses kamera");
-                document.getElementById("permission").style.display = "flex";
+                setTimeout(() => {
+                    window.close();
+                }, 500);
             });
         }
 
-        // CLOSE BUTTON (AMAN)
+        // CLOSE BUTTON
         function closeScanner() {
-            if (scanner && isScanning) {
-                scanner.stop().then(() => {
-                    window.close();
-                }).catch(() => {
-                    window.close();
-                });
-            } else {
-                window.close();
+            if (isScanning) {
+                Quagga.stop();
             }
+            window.close();
         }
     </script>
 
