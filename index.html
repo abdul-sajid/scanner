@@ -79,8 +79,8 @@
             position: absolute;
             top: 50%;
             left: 50%;
-            width: 260px;
-            height: 140px;
+            width: 300px;
+            height: 120px;
             transform: translate(-50%, -50%);
             border: 2px dashed rgba(255, 255, 255, 0.2);
             border-radius: 10px;
@@ -170,7 +170,7 @@
                     { facingMode: "environment" },
                     {
                         fps: 10,
-                        qrbox: { width: 280, height: 280 }
+                        qrbox: { width: 320, height: 320 }
                     },
                     (text) => handleResult(text),
                     () => { }
@@ -192,13 +192,13 @@
                     target: document.querySelector("#scanner"),
                     constraints: {
                         facingMode: "environment",
-                        width: { min: 640 },
-                        height: { min: 480 }
+                        width: { min: 1280 },
+                        height: { min: 720 }
                     }
                 },
                 locator: {
-                    patchSize: "medium",
-                    halfSample: true
+                    patchSize: "small",
+                    halfSample: false
                 },
                 numOfWorkers: 2,
                 decoder: {
@@ -235,7 +235,7 @@
 
                         const avgError = errors.reduce((a, b) => a + b, 0) / errors.length;
 
-                        if (avgError > 0.25) return;
+                        if (avgError > 0.30) return;
                     }
 
                     if (code.length < 8) return;
