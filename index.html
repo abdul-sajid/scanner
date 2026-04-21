@@ -1,39 +1,16 @@
 <!DOCTYPE html>
-<html lang="id">
+<html>
 <head>
-<meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Scanner</title>
-
 <script src="https://unpkg.com/html5-qrcode"></script>
-
 <style>
-body {
-  margin:0;
-  background:#020617;
-  color:white;
-  font-family:sans-serif;
-}
-#reader {
-  width:100%;
-  height:100vh;
-}
-.overlay {
-  position:fixed;
-  top:0;left:0;right:0;bottom:0;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  background:#020617;
-  z-index:10;
-}
-button {
-  padding:15px 20px;
-  border:none;
-  background:#06b6d4;
-  color:white;
-  border-radius:10px;
-  font-weight:bold;
+body { margin:0; background:black; color:white; font-family:sans-serif;}
+#reader { width:100%; height:70vh;}
+#result {
+  padding:20px;
+  font-size:18px;
+  text-align:center;
+  background:#111;
 }
 </style>
 </head>
@@ -41,75 +18,46 @@ button {
 <body>
 
 <div id="reader"></div>
-
-<div id="permission" class="overlay">
-  <button onclick="startScanning()">IZINKAN & MULAI</button>
-</div>
+<div id="result">MENUNGGU SCAN...</div>
 
 <script>
-const params = new URLSearchParams(window.location.search);
-const targetId = params.get('target');
+const resultBox = document.getElementById("result");
 
-let scanner;
-let isScanning = false;
+const html5QrCode = new Html5Qrcode("reader");
 
-function startScanning() {
-  document.getElementById("permission").style.display = "none";
+Html5Qrcode.getCameras().then(devices => {
+  if (!devices.length) {
+    resultBox.innerText = "❌ Kamera tidak ditemukan";
+    return;
+  }
 
-  scanner = new Html5Qrcode("reader");
+  html5QrCode.start(
+    { facingMode: "environment" },
+    {
+      fps: 10,
+      qrbox: 250,
+      formatsToSupport: [
+        Html5QrcodeSupportedFormats.QR_CODE,
+        Html5QrcodeSupportedFormats.CODE_128,
+        Html5QrcodeSupportedFormats.EAN_13,
+        Html5QrcodeSupportedFormats.EAN_8
+      ]
+    },
 
-  Html5Qrcode.getCameras().then(devices => {
-    if (!devices.length) {
-      alert("❌ Kamera tidak ditemukan");
-      return;
+    (decodedText, decodedResult) => {
+      resultBox.innerText = "✅ TERBACA: " + decodedText;
+      console.log(decodedText);
+    },
+
+    (err) => {
+      // tampilkan sedikit error biar kelihatan kerja
+      resultBox.innerText = "Scanning...";
     }
+  );
 
-    isScanning = true;
-
-    scanner.start(
-      { facingMode: "environment" },
-      {
-        fps: 10,
-        qrbox: { width: 250, height: 250 }
-      },
-
-      // SUCCESS
-      (decodedText, decodedResult) => {
-        if (!isScanning) return;
-
-        console.log("✅ SCAN:", decodedText);
-
-        isScanning = false;
-
-        // kirim ke parent
-        if (window.opener) {
-          window.opener.postMessage({
-            type: "SCAN_RESULT",
-            text: decodedText,
-            targetId: targetId || null
-          }, "*");
-        }
-
-        if (navigator.vibrate) navigator.vibrate(200);
-
-        // stop + delay close (PENTING)
-        scanner.stop().then(() => {
-          setTimeout(() => {
-            window.close();
-          }, 800);
-        });
-      },
-
-      // ERROR (normal scan miss)
-      (err) => {}
-    );
-
-  }).catch(err => {
-    console.error("❌ Kamera error:", err);
-    alert("❌ Gagal akses kamera");
-    document.getElementById("permission").style.display = "flex";
-  });
-}
+}).catch(err => {
+  resultBox.innerText = "❌ Error kamera: " + err;
+});
 </script>
 
 </body>
