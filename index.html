@@ -7,7 +7,6 @@
     <title>Scanner</title>
 
     <script src="https://unpkg.com/html5-qrcode"></script>
-    <script src="https://cdn.jsdelivr.net/npm/quagga@0.10.1/dist/quagga.min.js"></script>
 
     <style>
         body {
@@ -122,213 +121,116 @@
         const params = new URLSearchParams(window.location.search);
         const targetId = params.get("target");
 
-        let mode = "qr";
-        let qrScanner = null;
+        let scanner = null;
         let lastCode = null;
-        let isRunning = false;
+        let isScanning = false;
 
-        /* SWITCH MODE */
-        function setMode(m) {
-            console.log('setMode ->', m);
-            if (m === mode) return; // Already in this mode
-            mode = m;
+        // AUTO START
+        window.addEventListener("load", () => {
+            startScanning();
+        });
 
-            document.getElementById("qrBtn").classList.remove("active");
-            document.getElementById("barBtn").classList.remove("active");
-
-            if (m === "qr") document.getElementById("qrBtn").classList.add("active");
-            else document.getElementById("barBtn").classList.add("active");
-
-            stopAll();
+        function startScanning() {
+            console.log('Starting scanner...');
             
-            // Longer delay for proper cleanup
-            setTimeout(() => {
-                startScanner();
-            }, 500);
-        }
-
-        /* STOP ALL */
-        function stopAll() {
-            console.log('Stopping all scanners...');
-            
-            // Stop html5-qrcode
-            if (qrScanner) {
-                try { 
-                    qrScanner.stop().catch(() => {});
-                    qrScanner.clear().catch(() => {});
-                    console.log('html5-qrcode stopped');
-                } catch (e) { 
-                    console.warn('qrScanner stop error:', e);
-                }
-                qrScanner = null;
+            if (scanner) {
+                try {
+                    scanner.stop().catch(() => {});
+                    scanner.clear().catch(() => {});
+                } catch (e) {}
+                scanner = null;
             }
-            
-            // Stop Quagga
-            if (typeof Quagga !== "undefined") {
-                try { 
-                    Quagga.offDetected();
-                    Quagga.stop(); 
-                    console.log('Quagga stopped');
-                } catch (e) { 
-                    console.warn('Quagga stop error:', e);
-                }
-            }
-            isRunning = false;
-        }
 
-        window.addEventListener("load", startScanner);
-
-        function startScanner() {
-            console.log('startScanner called, mode:', mode);
-            stopAll();
             lastCode = null;
-
-            // Clear scanner div completely
-            const scannerDiv = document.getElementById("scanner");
-            scannerDiv.innerHTML = '';
-            
-            // Reset result message
+            isScanning = false;
             document.getElementById("result").innerText = "Menunggu scan...";
 
-            // Give a moment for cleanup
-            setTimeout(() => {
-                if (mode === "qr") startQR();
-                else startBarcode();
-            }, 100);
-        }
+            scanner = new Html5Qrcode("scanner");
 
-        /* QR MODE */
-        function startQR() {
-            console.log('Starting QR mode with html5-qrcode...');
-            
-            qrScanner = new Html5Qrcode("scanner");
-            
             Html5Qrcode.getCameras()
                 .then(devices => {
-                    if (!devices || devices.length === 0) {
-                        document.getElementById("result").innerText = "Kamera tidak ditemukan";
+                    if (!devices || !devices.length) {
+                        document.getElementById("result").innerText = "❌ Kamera tidak ditemukan";
                         return;
                     }
 
-                    qrScanner.start(
+                    console.log('Camera found, starting...');
+
+                    scanner.start(
                         { facingMode: "environment" },
-                        { fps: 10, qrbox: 250 },
+                        {
+                            fps: 15,
+                            qrbox: 250,
+                            formatsToSupport: [
+                                Html5QrcodeSupportedFormats.QR_CODE,
+                                Html5QrcodeSupportedFormats.CODE_128,
+                                Html5QrcodeSupportedFormats.CODE_39,
+                                Html5QrcodeSupportedFormats.EAN_13,
+                                Html5QrcodeSupportedFormats.EAN_8,
+                                Html5QrcodeSupportedFormats.UPC_A,
+                                Html5QrcodeSupportedFormats.UPC_E
+                            ]
+                        },
                         (decodedText) => {
-                            console.log('QR detected:', decodedText);
-                            handleResult(decodedText);
+                            if (isScanning) return;
+                            if (decodedText === lastCode) return;
+
+                            lastCode = decodedText;
+                            isScanning = true;
+                            console.log('✅ Scan result:', decodedText);
+
+                            document.getElementById("result").innerText = "✅ " + decodedText;
+
+                            if (window.opener) {
+                                window.opener.postMessage({
+                                    type: "SCAN_RESULT",
+                                    text: decodedText,
+                                    targetId: targetId || null
+                                }, "*");
+                            }
+
+                            if (navigator.vibrate) navigator.vibrate(200);
+
+                            scanner.stop().catch(() => {});
+                            setTimeout(() => {
+                                try { window.close(); } catch (e) {}
+                            }, 500);
                         },
                         () => {} // ignore errors
                     );
-                    isRunning = true;
-                    console.log('QR scanner started');
+
+                    isScanning = true;
+                    console.log('Scanner started successfully');
                 })
                 .catch(err => {
-                    console.error('QR getCameras error:', err);
-                    document.getElementById("result").innerText = "Error: " + err.message;
+                    console.error('Camera error:', err);
+                    document.getElementById("result").innerText = "❌ " + err.message;
                 });
         }
 
-        /* BARCODE MODE */
-        function startBarcode() {
-            console.log('Starting Barcode mode with Quagga...');
-
-            const config = {
-                inputStream: {
-                    type: "LiveStream",
-                    target: document.getElementById("scanner"),
-                    constraints: {
-                        width: { min: 640 },
-                        height: { min: 480 },
-                        facingMode: "environment"
-                    }
-                },
-                decoder: {
-                    readers: [
-                        "ean_reader",
-                        "ean_8_reader", 
-                        "code_128_reader",
-                        "upc_reader",
-                        "code_39_reader"
-                    ]
-                }
-            };
-
-            Quagga.init(config, function (err) {
-                if (err) {
-                    console.error("Barcode init error:", err);
-                    document.getElementById("result").innerText = "Barcode Error: " + err.message;
-                    return;
-                }
-
-                console.log('Barcode initialized, starting...');
-                Quagga.start();
-                isRunning = true;
-
-                Quagga.onDetected(function (res) {
-                    if (!isRunning || !res || !res.codeResult) return;
-                    const code = res.codeResult.code;
-                    if (code) {
-                        console.log('Barcode detected:', code);
-                        handleResult(code);
-                    }
-                });
-            });
-        }
-
-        /* RESULT HANDLER */
-        function handleResult(code) {
-            if (code === lastCode) return;
-            lastCode = code;
-
-            console.log('Result received:', code);
-            document.getElementById("result").innerText = "✅ " + code;
-
-            if (window.opener) {
-                window.opener.postMessage({
-                    type: "SCAN_RESULT",
-                    text: code,
-                    targetId: targetId || null,
-                    mode: mode
-                }, "*");
-            }
-
-            if (navigator.vibrate) navigator.vibrate(150);
-
-            // Auto close after delay
-            setTimeout(() => {
-                try {
-                    window.close();
-                } catch (e) {
-                    console.warn('window.close() failed');
-                }
-            }, 800);
-        }
-
-        /* CLOSE */
         function closeScanner() {
-            console.log('closeScanner -> called');
-            stopAll();
-            
-            try {
-                window.close();
-                console.log('window.close() succeeded');
-            } catch (e) {
-                console.warn('window.close failed:', e);
-                document.getElementById("result").innerText = "⚠️ Tekan tombol BACK untuk keluar";
+            console.log('Closing...');
+            if (scanner) {
+                try {
+                    scanner.stop().catch(() => {});
+                    scanner.clear().catch(() => {});
+                } catch (e) {}
+            }
+            try { window.close(); } catch (e) {
+                document.getElementById("result").innerText = "⚠️ Tekan BACK untuk keluar";
             }
         }
 
-        // Attach robust event listeners in case inline handlers fail
-        (function attachActions(){
-            try {
-                const q = document.getElementById('qrBtn');
-                const b = document.getElementById('barBtn');
-                const c = document.getElementById('closeBtn');
-                if (q) q.addEventListener('click', () => { console.log('qrBtn click'); setMode('qr'); });
-                if (b) b.addEventListener('click', () => { console.log('barBtn click'); setMode('barcode'); });
-                if (c) c.addEventListener('click', () => { console.log('closeBtn click'); closeScanner(); });
-            } catch (e) { console.warn('attachActions error', e); }
-        })();
+        function setMode(m) {
+            // Mode switch disabled - using unified scanner
+            console.log('Mode requested (ignored):', m);
+        }
+
+        // Button event listeners
+        setTimeout(() => {
+            const closeBtn = document.getElementById('closeBtn');
+            if (closeBtn) closeBtn.addEventListener('click', closeScanner);
+        }, 100);
     </script>
 
 </body>
