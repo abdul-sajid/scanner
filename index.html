@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Scanner</title>
+    <!-- Library QR Scanner -->
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <!-- Tailwind CSS untuk tampilan premium -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        #reader video {
+            object-fit: cover !important;
+            border-radius: 1rem;
+        }
+
+        .scan-region-highlight {
+            border-radius: 1rem !important;
+            outline: none !important;
+        }
+    </style>
+</head>
+
+<body class="bg-slate-950 text-white font-sans overflow-hidden h-screen flex flex-col">
+    <!-- Header -->
+    <div class="px-6 py-4 bg-slate-900 border-b border-white/10 flex justify-between items-center shrink-0">
+        <div>
+            <h1 class="text-lg font-bold tracking-tight text-cyan-400">QR SCANNER</h1>
+            <p id="target-label" class="text-[10px] text-slate-400 uppercase tracking-widest mt-0.5">READY TO SCAN</p>
+        </div>
+        <button onclick="window.close()"
+            class="w-10 h-10 flex items-center justify-center rounded-full bg-white/5 hover:bg-red-500/20 text-white transition-colors">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+            </svg>
+        </button>
+    </div>
+
+    <!-- Scanner Viewport -->
+    <div class="flex-1 relative bg-black overflow-hidden flex items-center justify-center">
+        <!-- Kotak Focus di Tengah (Visual Only) -->
+        <div class="absolute inset-0 z-10 pointer-events-none flex items-center justify-center">
+            <div class="w-64 h-64 border-2 border-dashed border-cyan-400/50 rounded-3xl"></div>
+        </div>
+
+        <div id="reader" class="w-full h-full"></div>
+
+        <!-- Overlay Awal (Minta Izin) -->
+        <div id="permission-view"
+            class="absolute inset-0 z-20 bg-slate-950 flex flex-col items-center justify-center p-8 text-center">
+            <div class="w-20 h-20 bg-cyan-500/10 rounded-3xl flex items-center justify-center mb-6 text-cyan-400">
+                <svg class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                        d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z">
+                    </path>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                        d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                </svg>
+            </div>
+            <h2 class="text-xl font-bold mb-2">Akses Kamera</h2>
+            <p class="text-slate-400 text-sm mb-8 leading-relaxed">Berikan izin kamera untuk memindai barcode produk
+                secara otomatis.</p>
+            <button onclick="startScanning()"
+                class="w-full py-4 bg-cyan-600 hover:bg-cyan-500 text-white rounded-2xl font-bold shadow-lg shadow-cyan-900/20 transition-all active:scale-95">
+                IZINKAN & MULAI
+            </button>
+        </div>
+    </div>
+
+    <!-- Footer Status -->
+    <div class="p-6 bg-slate-900 border-t border-white/10 shrink-0 text-center">
+        <p class="text-[10px] text-slate-500 tracking-tighter">POWERED BY HTML5-QRCODE | GITHUB PAGES VERSION</p>
+    </div>
+
+    <script>
+        const html5QrCode = new Html5Qrcode("reader");
+        const params = new URLSearchParams(window.location.search);
+        const targetId = params.get('target');
+
+        if (targetId) {
+            document.getElementById('target-label').innerText = "SCANNING FOR: " + targetId.replace('trx-', '');
+        }
+
+        async function startScanning() {
+            try {
+                // Sembunyikan overlay
+                document.getElementById('permission-view').style.display = 'none';
+
+                const config = {
+                    fps: 20,
+                    qrbox: { width: 250, height: 250 },
+                    aspectRatio: 1.0,
+                    showTorchButtonIfSupported: true
+                };
+
+                await html5QrCode.start(
+                    { facingMode: "environment" },
+                    config,
+                    (decodedText) => {
+                        if (window.opener) {
+                            window.opener.postMessage({
+                                type: 'SCAN_RESULT',
+                                text: decodedText,
+                                targetId: targetId
+                            }, "*");
+                        }
+                        if (navigator.vibrate) navigator.vibrate([100]);
+                        setTimeout(() => window.close(), 300);
+                    }
+                );
+            } catch (err) {
+                console.error(err);
+                alert("Gagal mengakses kamera. Pastikan browser diizinkan mengakses kamera di pengaturan HP.");
+                document.getElementById('permission-view').style.display = 'flex';
+            }
+        }
+    </script>
+</body>
+
+</html>
