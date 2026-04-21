@@ -17,7 +17,7 @@
             color: white;
         }
 
-        /* TOP BAR */
+        /* HEADER */
         .topbar {
             position: fixed;
             top: 0;
@@ -65,7 +65,7 @@
             color: white;
         }
 
-        /* SCANNER AREA */
+        /* SCANNER */
         #scanner {
             position: fixed;
             top: 56px;
@@ -74,7 +74,7 @@
             right: 0;
         }
 
-        /* CENTER BOX */
+        /* FOCUS BOX */
         .box {
             position: absolute;
             top: 50%;
@@ -122,35 +122,46 @@
         const params = new URLSearchParams(window.location.search);
         const targetId = params.get("target");
 
-        let mode = "qr"; // 'qr' or 'barcode'
+        let mode = "qr";
         let qrScanner = null;
-        let lastCode = null;
         let isScanning = false;
+        let lastCode = null;
         let scanBuffer = [];
         let detectedHandler = null;
-        
-        // AUTO START
-        window.addEventListener("load", () => {
-            startScanner();
-        });
 
+        /* START */
+        window.addEventListener("load", startScanner);
+
+        /* SWITCH MODE */
+        document.getElementById("qrBtn").onclick = () => setMode("qr");
+        document.getElementById("barBtn").onclick = () => setMode("barcode");
+        document.getElementById("closeBtn").onclick = closeScanner;
+
+        function setMode(m) {
+            if (mode === m) return;
+
+            mode = m;
+
+            document.getElementById("qrBtn").classList.toggle("active", m === "qr");
+            document.getElementById("barBtn").classList.toggle("active", m === "barcode");
+
+            startScanner();
+        }
+
+        /* START SCANNER */
         function startScanner() {
-            console.log('Starting scanner in mode:', mode);
             stopAll();
 
             lastCode = null;
-            isScanning = false;
+            scanBuffer = [];
             document.getElementById("result").innerText = "Menunggu scan...";
 
-            if (mode === "qr") {
-                startQRMode();
-            } else {
-                startBarcodeMode();
-            }
+            if (mode === "qr") startQR();
+            else startBarcode();
         }
 
-        /* QR MODE - using html5-qrcode */
-        function startQRMode() {
+        /* QR MODE */
+        function startQR() {
             qrScanner = new Html5Qrcode("scanner");
 
             Html5Qrcode.getCameras().then(() => {
@@ -159,26 +170,21 @@
                     { facingMode: "environment" },
                     {
                         fps: 10,
-                        qrbox: { width: 280, height: 280 } // jangan terlalu kecil
-                        // ❌ HAPUS formatsToSupport → ini bikin gagal detect di beberapa HP
+                        qrbox: { width: 280, height: 280 }
                     },
-
-                    (decodedText) => {
-                        handleResult(decodedText);
-                    },
-
+                    (text) => handleResult(text),
                     () => { }
                 );
 
                 isScanning = true;
 
-            }).catch(err => {
+            }).catch(() => {
                 document.getElementById("result").innerText = "❌ Kamera error";
             });
         }
 
-        /* BARCODE MODE - using quagga2 */
-        function startBarcodeMode() {
+        /* BARCODE MODE */
+        function startBarcode() {
 
             const config = {
                 inputStream: {
@@ -190,14 +196,11 @@
                         height: { min: 480 }
                     }
                 },
-
                 locator: {
-                    patchSize: "medium", // jangan terlalu besar
-                    halfSample: true     // lebih ringan & stabil
+                    patchSize: "medium",
+                    halfSample: true
                 },
-
                 numOfWorkers: 2,
-
                 decoder: {
                     readers: [
                         "code_128_reader",
@@ -206,7 +209,6 @@
                         "upc_reader"
                     ]
                 },
-
                 locate: true
             };
 
@@ -219,21 +221,31 @@
                 Quagga.start();
                 isScanning = true;
 
-                // 🔥 PENTING: simpan handler
                 detectedHandler = function (res) {
 
                     if (!isScanning || !res.codeResult) return;
 
                     const code = res.codeResult.code;
 
-                    // buffer ringan
+                    // 🔥 FILTER ERROR
+                    if (res.codeResult.decodedCodes) {
+                        const errors = res.codeResult.decodedCodes
+                            .filter(x => x.error !== undefined)
+                            .map(x => x.error);
+
+                        const avgError = errors.reduce((a, b) => a + b, 0) / errors.length;
+
+                        if (avgError > 0.25) return;
+                    }
+
+                    if (code.length < 8) return;
+
                     scanBuffer.push(code);
-                    if (scanBuffer.length > 4) scanBuffer.shift();
+                    if (scanBuffer.length > 6) scanBuffer.shift();
 
                     const count = scanBuffer.filter(x => x === code).length;
 
-                    // cukup 2x sama
-                    if (count >= 2) {
+                    if (count >= 3) {
                         handleResult(code);
                         scanBuffer = [];
                     }
@@ -242,33 +254,8 @@
                 Quagga.onDetected(detectedHandler);
             });
         }
-        /* SCAN SUCCESS HANDLER */
-        function onScanSuccess(code) {
-            if (code === lastCode) return;
-            lastCode = code;
-            isScanning = true; // Prevent duplicate scans
 
-            console.log('✅ Scan result:', code);
-            document.getElementById("result").innerText = "✅ " + code;
-
-            if (window.opener) {
-                window.opener.postMessage({
-                    type: "SCAN_RESULT",
-                    text: code,
-                    targetId: targetId || null,
-                    mode: mode
-                }, "*");
-            }
-
-            if (navigator.vibrate) navigator.vibrate(200);
-
-            stopAll();
-            setTimeout(() => {
-                try { window.close(); } catch (e) { }
-            }, 500);
-        }
-
-
+        /* HANDLE RESULT */
         function handleResult(code) {
             if (code === lastCode) return;
 
@@ -288,10 +275,10 @@
             if (navigator.vibrate) navigator.vibrate(200);
 
             stopAll();
-
             setTimeout(() => window.close(), 500);
         }
-        /* STOP ALL SCANNERS */
+
+        /* STOP ALL */
         function stopAll() {
             isScanning = false;
 
@@ -314,51 +301,11 @@
             }
         }
 
-        /* SWITCH MODE */
-        function setMode(m) {
-            if (m === mode) return; // Already in this mode
-            console.log('Switching to mode:', m);
-
-            mode = m;
-
-            // Update button styles
-            document.getElementById("qrBtn").classList.remove("active");
-            document.getElementById("barBtn").classList.remove("active");
-            if (m === "qr") {
-                document.getElementById("qrBtn").classList.add("active");
-            } else {
-                document.getElementById("barBtn").classList.add("active");
-            }
-
-            // Restart scanner with new mode
-            setTimeout(() => {
-                startScanner();
-            }, 300);
-        }
-
-        /* CLOSE SCANNER */
+        /* CLOSE */
         function closeScanner() {
-            console.log('Closing scanner...');
             stopAll();
-            try {
-                window.close();
-            } catch (e) {
-                document.getElementById("result").innerText = "⚠️ Tekan BACK untuk keluar";
-            }
+            window.close();
         }
-
-        // Attach button event listeners
-        setTimeout(() => {
-            const qrBtn = document.getElementById('qrBtn');
-            const barBtn = document.getElementById('barBtn');
-            const closeBtn = document.getElementById('closeBtn');
-
-            if (qrBtn) qrBtn.addEventListener('click', () => setMode('qr'));
-            if (barBtn) barBtn.addEventListener('click', () => setMode('barcode'));
-            if (closeBtn) closeBtn.addEventListener('click', closeScanner);
-
-            console.log('Button listeners attached');
-        }, 100);
     </script>
 
 </body>
