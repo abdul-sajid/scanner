@@ -5,8 +5,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Scanner</title>
-    <!-- Library ZXing untuk QR & Barcode -->
-    <script src="https://unpkg.com/@zxing/library@0.20.0/esm/index.min.js"></script>
+    <!-- Library JSQuagga untuk QR & Barcode -->
+    <script src="https://cdn.jsdelivr.net/npm/jsquagga@0.10.10/dist/quagga.min.js"></script>
     <!-- Tailwind CSS untuk tampilan premium -->
     <link rel="stylesheet" href="https://abdul-sajid.github.io/scanner/style.css">
     <style>
@@ -70,7 +70,7 @@
 
     <!-- Footer Status -->
     <div class="p-6 bg-slate-900 border-t border-white/10 shrink-0 text-center">
-        <p class="text-[10px] text-slate-500 tracking-tighter">POWERED BY ZXING | SUPPORTS QR CODE & BARCODE</p>
+        <p class="text-[10px] text-slate-500 tracking-tighter">POWERED BY JSQUAGGA | SUPPORTS QR CODE & BARCODE</p>
     </div>
 
     <script>
@@ -86,54 +86,73 @@
             startScanning();
         });
 
-        async function startScanning() {
+        function startScanning() {
             try {
                 // Sembunyikan overlay
                 document.getElementById('permission-view').style.display = 'none';
 
-                const codeReader = new ZXing.BrowserMultiFormatReader();
-                const videoElement = document.createElement('video');
                 const readerElement = document.getElementById('reader');
-
-                // Atur video element
-                videoElement.style.width = '100%';
-                videoElement.style.height = '100%';
-                videoElement.style.objectFit = 'cover';
                 readerElement.innerHTML = '';
-                readerElement.appendChild(videoElement);
 
-                console.log('Memulai scanning...');
+                const config = {
+                    inputStream: {
+                        name: "Live",
+                        type: "LiveStream",
+                        constraints: {
+                            width: { min: 640 },
+                            height: { min: 480 },
+                            facingMode: "environment"
+                        },
+                        target: readerElement
+                    },
+                    locator: {
+                        patchSize: "medium",
+                        halfSample: true
+                    },
+                    numOfWorkers: 4,
+                    decoder: {
+                        readers: [
+                            "code_128_reader",
+                            "ean_reader",
+                            "upc_reader",
+                            "qr_reader",
+                            "code_39_reader",
+                            "code_93_reader"
+                        ]
+                    },
+                    locate: true
+                };
 
-                // Mulai scanning dengan camera belakang
-                await codeReader.decodeFromVideoDevice(
-                    undefined,
-                    videoElement,
-                    (result, error) => {
-                        if (result) {
-                            const decodedText = result.text;
-                            console.log('✅ Hasil scan:', decodedText, 'Format:', result.format);
-                            
+                Quagga.init(config, (err) => {
+                    if (err) {
+                        console.error('❌ Quagga init error:', err);
+                        throw err;
+                    }
+
+                    console.log('✅ Quagga initialized');
+                    Quagga.start();
+
+                    Quagga.onDetected((result) => {
+                        if (result && result.codeResult && result.codeResult.code) {
+                            const decodedText = result.codeResult.code;
+                            console.log('✅ Hasil scan:', decodedText, 'Format:', result.codeResult.format);
+
                             if (window.opener) {
                                 window.opener.postMessage({
                                     type: 'SCAN_RESULT',
                                     text: decodedText,
                                     targetId: targetId,
-                                    format: result.format
+                                    format: result.codeResult.format
                                 }, "*");
                             }
                             if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
-                            
+
                             // Stop scanning
-                            codeReader.reset();
+                            Quagga.stop();
                             setTimeout(() => window.close(), 300);
                         }
-                        if (error && error.name !== 'NotFoundException') {
-                            console.warn('Scanning error:', error);
-                        }
-                    }
-                );
-
-                console.log('✅ Scanning dimulai berhasil');
+                    });
+                });
 
             } catch (err) {
                 console.error('❌ Error detail:', {
