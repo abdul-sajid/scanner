@@ -6,174 +6,250 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Scanner</title>
 
-    <!-- Quagga2 -->
+    <script src="https://unpkg.com/html5-qrcode"></script>
     <script src="https://cdn.jsdelivr.net/npm/@ericblade/quagga2/dist/quagga.min.js"></script>
 
     <style>
         body {
             margin: 0;
-            background: #020617;
+            font-family: system-ui, sans-serif;
+            background: #0b1220;
             color: white;
-            font-family: sans-serif;
         }
 
-        /* HEADER */
-        .header {
+        /* TOP BAR */
+        .topbar {
             position: fixed;
             top: 0;
             left: 0;
             right: 0;
-            height: 60px;
+            height: 56px;
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 0 15px;
-            background: rgba(0, 0, 0, 0.6);
-            backdrop-filter: blur(10px);
-            z-index: 10;
+            padding: 0 12px;
+            background: #0f172a;
+            border-bottom: 1px solid #1f2937;
         }
 
         .title {
             font-size: 14px;
-            color: #22d3ee;
-            font-weight: bold;
+            font-weight: 600;
         }
 
-        .close-btn {
-            width: 40px;
-            height: 40px;
+        .actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        button {
             border: none;
-            border-radius: 50%;
-            background: rgba(255, 255, 255, 0.1);
-            color: white;
-            font-size: 18px;
+            padding: 8px 10px;
+            border-radius: 8px;
+            font-size: 12px;
+            cursor: pointer;
         }
 
-        /* SCANNER */
-        #reader {
-            position: absolute;
-            top: 60px;
+        .btn {
+            background: #1f2937;
+            color: white;
+        }
+
+        .btn.active {
+            background: #06b6d4;
+            color: black;
+        }
+
+        .close {
+            background: #ef4444;
+            color: white;
+        }
+
+        /* SCANNER AREA */
+        #scanner {
+            position: fixed;
+            top: 56px;
             bottom: 0;
             left: 0;
             right: 0;
         }
 
-        /* FOCUS BOX */
-        .scan-box {
+        /* CENTER BOX */
+        .box {
             position: absolute;
             top: 50%;
             left: 50%;
             width: 260px;
-            height: 120px;
+            height: 140px;
             transform: translate(-50%, -50%);
-            border: 2px dashed rgba(34, 211, 238, 0.6);
-            border-radius: 12px;
+            border: 2px dashed rgba(255, 255, 255, 0.2);
+            border-radius: 10px;
             pointer-events: none;
+        }
+
+        /* RESULT */
+        .result {
+            position: fixed;
+            bottom: 10px;
+            left: 10px;
+            right: 10px;
+            background: #111827;
+            padding: 10px;
+            border-radius: 10px;
+            font-size: 13px;
+            word-break: break-all;
         }
     </style>
 </head>
 
 <body>
 
-    <div class="header">
-        <div class="title">SCAN BARCODE</div>
-        <button class="close-btn" onclick="closeScanner()">✕</button>
+    <div class="topbar">
+        <div class="title">Scanner</div>
+
+        <div class="actions">
+            <button id="qrBtn" class="btn active" onclick="setMode('qr')">QR</button>
+            <button id="barBtn" class="btn" onclick="setMode('barcode')">BARCODE</button>
+            <button class="close" onclick="closeScanner()">✕</button>
+        </div>
     </div>
 
-    <div id="reader"></div>
-    <div class="scan-box"></div>
+    <div id="scanner"></div>
+    <div class="box"></div>
+    <div class="result" id="result">Menunggu scan...</div>
 
     <script>
         const params = new URLSearchParams(window.location.search);
-        const targetId = params.get('target');
+        const targetId = params.get("target");
 
-        let isScanning = false;
-        let lastResult = null;
+        let mode = "qr";
+        let qrScanner = null;
+        let lastCode = null;
+        let isRunning = false;
 
-        // AUTO START
-        window.addEventListener('load', startScanner);
+        /* SWITCH MODE */
+        function setMode(m) {
+            mode = m;
+
+            document.getElementById("qrBtn").classList.remove("active");
+            document.getElementById("barBtn").classList.remove("active");
+
+            if (m === "qr") document.getElementById("qrBtn").classList.add("active");
+            else document.getElementById("barBtn").classList.add("active");
+
+            stopAll();
+            startScanner();
+        }
+
+        /* STOP ALL */
+        function stopAll() {
+            if (qrScanner) {
+                qrScanner.stop().catch(() => { });
+                qrScanner.clear().catch(() => { });
+                qrScanner = null;
+            }
+
+            if (typeof Quagga !== "undefined") {
+                try { Quagga.stop(); } catch (e) { }
+            }
+
+            isRunning = false;
+        }
+
+        /* START */
+        window.addEventListener("load", startScanner);
 
         function startScanner() {
+            stopAll();
+            lastCode = null;
+
+            document.getElementById("result").innerText = "Menunggu scan...";
+
+            if (mode === "qr") startQR();
+            else startBarcode();
+        }
+
+        /* QR MODE */
+        function startQR() {
+            qrScanner = new Html5Qrcode("scanner");
+
+            Html5Qrcode.getCameras().then(() => {
+                qrScanner.start(
+                    { facingMode: "environment" },
+                    { fps: 10, qrbox: 250 },
+                    (text) => handleResult(text),
+                    () => { }
+                );
+                isRunning = true;
+            });
+        }
+
+        /* BARCODE MODE */
+        function startBarcode() {
 
             const config = {
                 inputStream: {
                     type: "LiveStream",
-                    target: document.querySelector("#reader"),
+                    target: document.getElementById("scanner"),
                     constraints: {
-                        facingMode: "environment",
-                        width: { ideal: 1280 },
-                        height: { ideal: 720 }
+                        facingMode: "environment"
                     }
                 },
-
-                locator: {
-                    patchSize: "large",
-                    halfSample: false
-                },
-
-                numOfWorkers: navigator.hardwareConcurrency || 4,
-                frequency: 10,
-
                 decoder: {
                     readers: [
                         "ean_reader",
                         "ean_8_reader",
                         "upc_reader",
                         "upc_e_reader",
-                        "code_128_reader"
+                        "code_128_reader",
+                        "code_39_reader"
                     ]
                 },
-
                 locate: true
             };
 
             Quagga.init(config, function (err) {
                 if (err) {
-                    console.error("❌ INIT ERROR:", err);
-                    alert("❌ Kamera gagal");
+                    document.getElementById("result").innerText = "Camera error";
                     return;
                 }
 
-                console.log("✅ Scanner ready");
-                isScanning = true;
                 Quagga.start();
-            });
+                isRunning = true;
 
-            Quagga.onDetected(function (result) {
+                Quagga.onDetected(function (res) {
+                    if (!isRunning) return;
 
-                if (!isScanning) return;
-
-                const code = result.codeResult.code;
-
-                // anti double scan
-                if (code === lastResult) return;
-                lastResult = code;
-
-                console.log("✅ DETECT:", code);
-
-                isScanning = false;
-
-                if (window.opener) {
-                    window.opener.postMessage({
-                        type: "SCAN_RESULT",
-                        text: code,
-                        targetId: targetId || null
-                    }, "*");
-                }
-
-                if (navigator.vibrate) navigator.vibrate(200);
-
-                Quagga.stop();
-
-                setTimeout(() => window.close(), 500);
+                    const code = res.codeResult.code;
+                    handleResult(code);
+                });
             });
         }
 
-        // CLOSE BUTTON
-        function closeScanner() {
-            if (isScanning) {
-                Quagga.stop();
+        /* RESULT HANDLER */
+        function handleResult(code) {
+            if (code === lastCode) return;
+            lastCode = code;
+
+            document.getElementById("result").innerText = code;
+
+            if (window.opener) {
+                window.opener.postMessage({
+                    type: "SCAN_RESULT",
+                    text: code,
+                    targetId: targetId || null,
+                    mode: mode
+                }, "*");
             }
+
+            if (navigator.vibrate) navigator.vibrate(150);
+
+            setTimeout(() => window.close(), 500);
+        }
+
+        /* CLOSE */
+        function closeScanner() {
+            stopAll();
             window.close();
         }
     </script>
