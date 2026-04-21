@@ -1,0 +1,18 @@
+# Build Tools & Dependencies
+node_modules/
+package-lock.json
+npm-debug.log*
+
+# Tailwind Artifacts
+tailwind-tmp.css
+src/tailwind-dist.html
+
+# IDE & OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Clasp / Apps Script (Optional: keep these if you want to sync scriptId)
+# .clasp.json
+# appsscript.json
