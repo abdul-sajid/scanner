@@ -127,7 +127,8 @@
         let lastCode = null;
         let isScanning = false;
         let scanBuffer = [];
-
+        let detectedHandler = null;
+        
         // AUTO START
         window.addEventListener("load", () => {
             startScanner();
@@ -185,24 +186,24 @@
                     target: document.querySelector("#scanner"),
                     constraints: {
                         facingMode: "environment",
-                        width: { ideal: 1280 },
-                        height: { ideal: 720 }
+                        width: { min: 640 },
+                        height: { min: 480 }
                     }
                 },
 
                 locator: {
-                    patchSize: "large",
-                    halfSample: false
+                    patchSize: "medium", // jangan terlalu besar
+                    halfSample: true     // lebih ringan & stabil
                 },
 
-                numOfWorkers: navigator.hardwareConcurrency || 4,
+                numOfWorkers: 2,
 
                 decoder: {
                     readers: [
+                        "code_128_reader",
                         "ean_reader",
                         "ean_8_reader",
-                        "upc_reader",
-                        "code_128_reader"
+                        "upc_reader"
                     ]
                 },
 
@@ -218,23 +219,27 @@
                 Quagga.start();
                 isScanning = true;
 
-                Quagga.onDetected(function (res) {
+                // 🔥 PENTING: simpan handler
+                detectedHandler = function (res) {
+
                     if (!isScanning || !res.codeResult) return;
 
                     const code = res.codeResult.code;
 
-                    // 🔥 BUFFER VALIDASI (ANTI NGACO)
+                    // buffer ringan
                     scanBuffer.push(code);
+                    if (scanBuffer.length > 4) scanBuffer.shift();
 
-                    if (scanBuffer.length > 5) scanBuffer.shift();
+                    const count = scanBuffer.filter(x => x === code).length;
 
-                    const same = scanBuffer.filter(x => x === code).length;
-
-                    if (same >= 3) {
+                    // cukup 2x sama
+                    if (count >= 2) {
                         handleResult(code);
                         scanBuffer = [];
                     }
-                });
+                };
+
+                Quagga.onDetected(detectedHandler);
             });
         }
         /* SCAN SUCCESS HANDLER */
@@ -300,8 +305,11 @@
 
             if (typeof Quagga !== "undefined") {
                 try {
+                    if (detectedHandler) {
+                        Quagga.offDetected(detectedHandler);
+                        detectedHandler = null;
+                    }
                     Quagga.stop();
-                    Quagga.offDetected();
                 } catch (e) { }
             }
         }
