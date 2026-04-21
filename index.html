@@ -108,9 +108,9 @@
         <div class="title">Scanner</div>
 
         <div class="actions">
-            <button id="qrBtn" class="btn active" onclick="setMode('qr')">QR</button>
-            <button id="barBtn" class="btn" onclick="setMode('barcode')">BARCODE</button>
-            <button class="close" onclick="closeScanner()">✕</button>
+            <button id="qrBtn" class="btn active">QR</button>
+            <button id="barBtn" class="btn">BARCODE</button>
+            <button id="closeBtn" class="close">✕</button>
         </div>
     </div>
 
@@ -129,6 +129,7 @@
 
         /* SWITCH MODE */
         function setMode(m) {
+            console.log('setMode ->', m);
             mode = m;
 
             document.getElementById("qrBtn").classList.remove("active");
@@ -249,9 +250,22 @@
 
         /* CLOSE */
         function closeScanner() {
+            console.log('closeScanner -> called');
             stopAll();
             window.close();
         }
+
+        // Attach robust event listeners in case inline handlers fail
+        (function attachActions(){
+            try {
+                const q = document.getElementById('qrBtn');
+                const b = document.getElementById('barBtn');
+                const c = document.getElementById('closeBtn');
+                if (q) q.addEventListener('click', () => { console.log('qrBtn click'); setMode('qr'); });
+                if (b) b.addEventListener('click', () => { console.log('barBtn click'); setMode('barcode'); });
+                if (c) c.addEventListener('click', () => { console.log('closeBtn click'); closeScanner(); });
+            } catch (e) { console.warn('attachActions error', e); }
+        })();
     </script>
 
 </body>
