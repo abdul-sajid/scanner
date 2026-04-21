@@ -102,14 +102,16 @@
                 readerElement.innerHTML = '';
                 readerElement.appendChild(videoElement);
 
+                console.log('Memulai scanning...');
+
                 // Mulai scanning dengan camera belakang
-                const result = await codeReader.decodeFromVideoDevice(
+                await codeReader.decodeFromVideoDevice(
                     undefined,
                     videoElement,
                     (result, error) => {
                         if (result) {
                             const decodedText = result.text;
-                            console.log('Hasil scan:', decodedText);
+                            console.log('✅ Hasil scan:', decodedText, 'Format:', result.format);
                             
                             if (window.opener) {
                                 window.opener.postMessage({
@@ -125,14 +127,35 @@
                             codeReader.reset();
                             setTimeout(() => window.close(), 300);
                         }
+                        if (error && error.name !== 'NotFoundException') {
+                            console.warn('Scanning error:', error);
+                        }
                     }
                 );
 
+                console.log('✅ Scanning dimulai berhasil');
+
             } catch (err) {
-                console.error('Error:', err);
-                const errorMsg = err.name === 'NotAllowedError' 
-                    ? "Kamera ditolak. Berikan izin akses kamera di pengaturan HP." 
-                    : "Gagal mengakses kamera. Cek koneksi & izin kamera.";
+                console.error('❌ Error detail:', {
+                    name: err.name,
+                    message: err.message,
+                    stack: err.stack
+                });
+
+                let errorMsg = "Gagal mengakses kamera.";
+                
+                if (err.name === 'NotAllowedError') {
+                    errorMsg = "❌ Izin ditolak. Buka pengaturan HP → izinkan akses kamera.";
+                } else if (err.name === 'NotFoundError') {
+                    errorMsg = "❌ Kamera tidak ditemukan. Cek apakah kamera tersedia.";
+                } else if (err.name === 'NotReadableError') {
+                    errorMsg = "❌ Kamera sedang digunakan app lain. Tutup app tersebut.";
+                } else if (err.message.includes('HTTPS')) {
+                    errorMsg = "❌ Halaman harus HTTPS untuk akses kamera.";
+                } else {
+                    errorMsg = "❌ Error: " + err.message;
+                }
+
                 alert(errorMsg);
                 document.getElementById('permission-view').style.display = 'flex';
             }
